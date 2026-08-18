@@ -84,7 +84,7 @@ pub struct RenewFlightEndpointRequest {
 ///
 /// An opaque result returned after executing an action.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct Result {
+pub struct FlightResult {
     #[prost(bytes = "bytes", tag = "1")]
     pub body: ::prost::bytes::Bytes,
 }
@@ -781,7 +781,7 @@ pub mod flight_service_client {
             &mut self,
             request: impl tonic::IntoRequest<super::Action>,
         ) -> std::result::Result<
-            tonic::Response<tonic::codec::Streaming<super::Result>>,
+            tonic::Response<tonic::codec::Streaming<super::FlightResult>>,
             tonic::Status,
         > {
             self.inner
@@ -984,7 +984,7 @@ pub mod flight_service_server {
         ) -> std::result::Result<tonic::Response<Self::DoExchangeStream>, tonic::Status>;
         /// Server streaming response type for the DoAction method.
         type DoActionStream: tonic::codegen::tokio_stream::Stream<
-                Item = std::result::Result<super::Result, tonic::Status>,
+                Item = std::result::Result<super::FlightResult, tonic::Status>,
             >
             + std::marker::Send
             + 'static;
@@ -1473,7 +1473,7 @@ pub mod flight_service_server {
                         T: FlightService,
                     > tonic::server::ServerStreamingService<super::Action>
                     for DoActionSvc<T> {
-                        type Response = super::Result;
+                        type Response = super::FlightResult;
                         type ResponseStream = T::DoActionStream;
                         type Future = BoxFuture<
                             tonic::Response<Self::ResponseStream>,

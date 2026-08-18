@@ -53,8 +53,11 @@ use arrow_schema::{ArrowError, Schema};
 use arrow_ipc::convert::try_schema_from_ipc_buffer;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use buffa::EnumValue;
+use buffa::MessageField;
+use buffa_types::Timestamp;
 use bytes::Bytes;
-use prost_types::Timestamp;
+use chrono::DateTime;
 use std::{fmt, ops::Deref};
 
 type ArrowResult<T> = std::result::Result<T, ArrowError>;
@@ -76,15 +79,15 @@ pub mod flight_descriptor {
 /// Low Level [tonic] [`FlightServiceClient`](gen::flight_service_client::FlightServiceClient).
 pub mod flight_service_client {
     use super::r#gen;
-    pub use r#gen::flight_service_client::FlightServiceClient;
+    pub use r#gen::FlightServiceClient;
 }
 
 /// Low Level [tonic] [`FlightServiceServer`](gen::flight_service_server::FlightServiceServer)
 /// and [`FlightService`](gen::flight_service_server::FlightService).
 pub mod flight_service_server {
     use super::r#gen;
-    pub use r#gen::flight_service_server::FlightService;
-    pub use r#gen::flight_service_server::FlightServiceServer;
+    pub use r#gen::FlightService;
+    pub use r#gen::FlightServiceServer;
 }
 
 /// Mid Level [`FlightClient`]
@@ -123,9 +126,6 @@ pub use r#gen::PutResult;
 pub use r#gen::RenewFlightEndpointRequest;
 pub use r#gen::SchemaResult;
 pub use r#gen::Ticket;
-
-/// Helper to extract HTTP/gRPC trailers from a tonic stream.
-mod trailers;
 
 pub mod utils;
 
@@ -195,7 +195,7 @@ impl fmt::Display for FlightData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FlightData {{")?;
         write!(f, " descriptor: ")?;
-        match &self.flight_descriptor {
+        match self.flight_descriptor.as_option() {
             Some(d) => write!(f, "{d}")?,
             None => write!(f, "None")?,
         }
@@ -213,24 +213,27 @@ impl fmt::Display for FlightDescriptor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FlightDescriptor {{")?;
         write!(f, " type: ")?;
-        match self.r#type() {
-            DescriptorType::Cmd => {
-                write!(f, "cmd, value: ")?;
-                limited_fmt(f, &self.cmd, 8)?;
-            }
-            DescriptorType::Path => {
-                write!(f, "path: [")?;
-                let mut sep = "";
-                for element in &self.path {
-                    write!(f, "{sep}{element}")?;
-                    sep = ", ";
+        match self.r#type {
+            EnumValue::Known(descriptor_type) => match descriptor_type {
+                DescriptorType::UNKNOWN => write!(f, "unknown"),
+                DescriptorType::CMD => {
+                    write!(f, "cmd, value: ")?;
+                    limited_fmt(f, &self.cmd, 8)
                 }
-                write!(f, "]")?;
+                DescriptorType::PATH => {
+                    write!(f, "path: [")?;
+                    let mut sep = "";
+                    for element in &self.path {
+                        write!(f, "{sep}{element}")?;
+                        sep = ", ";
+                    }
+                    write!(f, "]")
+                }
+            },
+            EnumValue::Unknown(val) => {
+                write!(f, "unknown({val})")
             }
-            DescriptorType::Unknown => {
-                write!(f, "unknown")?;
-            }
-        }
+        }?;
         write!(f, " }}")
     }
 }
@@ -239,7 +242,7 @@ impl fmt::Display for FlightEndpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FlightEndpoint {{")?;
         write!(f, " ticket: ")?;
-        match &self.ticket {
+        match self.ticket.as_option() {
             Some(value) => write!(f, "{value}"),
             None => write!(f, " None"),
         }?;
@@ -251,8 +254,14 @@ impl fmt::Display for FlightEndpoint {
         }
         write!(f, "]")?;
         write!(f, ", expiration_time:")?;
-        match &self.expiration_time {
-            Some(value) => write!(f, " {value}"),
+        match self.expiration_time.as_option() {
+            Some(value) => write!(
+                f,
+                " {}",
+                DateTime::from_timestamp(value.seconds, value.nanos as u32)
+                    .map(|v| v.to_rfc3339())
+                    .unwrap_or_else(|| "unknown".to_string())
+            ),
             None => write!(f, " None"),
         }?;
         write!(f, ", app_metadata: ")?;
@@ -268,7 +277,7 @@ impl fmt::Display for FlightInfo {
         write!(f, "FlightInfo {{")?;
         write!(f, " schema: {schema}")?;
         write!(f, ", descriptor:")?;
-        match &self.flight_descriptor {
+        match self.flight_descriptor.as_option() {
             Some(d) => write!(f, " {d}"),
             None => write!(f, " None"),
         }?;
@@ -291,12 +300,12 @@ impl fmt::Display for PollInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "PollInfo {{")?;
         write!(f, " info:")?;
-        match &self.info {
+        match self.info.as_option() {
             Some(value) => write!(f, " {value}"),
             None => write!(f, " None"),
         }?;
         write!(f, ", descriptor:")?;
-        match &self.flight_descriptor {
+        match self.flight_descriptor.as_option() {
             Some(d) => write!(f, " {d}"),
             None => write!(f, " None"),
         }?;
@@ -306,8 +315,14 @@ impl fmt::Display for PollInfo {
             None => write!(f, " None"),
         }?;
         write!(f, ", expiration_time:")?;
-        match &self.expiration_time {
-            Some(value) => write!(f, " {value}"),
+        match self.expiration_time.as_option() {
+            Some(value) => write!(
+                f,
+                " {}",
+                DateTime::from_timestamp(value.seconds, value.nanos as u32)
+                    .map(|v| v.to_rfc3339())
+                    .unwrap_or_else(|| "unknown".to_string())
+            ),
             None => write!(f, " None"),
         }?;
         write!(f, " }}")
@@ -318,7 +333,7 @@ impl fmt::Display for CancelFlightInfoRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CancelFlightInfoRequest {{")?;
         write!(f, " info: ")?;
-        match &self.info {
+        match self.info.as_option() {
             Some(value) => write!(f, "{value}")?,
             None => write!(f, "None")?,
         }
@@ -329,7 +344,7 @@ impl fmt::Display for CancelFlightInfoRequest {
 impl fmt::Display for CancelFlightInfoResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CancelFlightInfoResult {{")?;
-        write!(f, " status: {}", self.status().as_str_name())?;
+        write!(f, " status: {}", self.status)?;
         write!(f, " }}")
     }
 }
@@ -338,7 +353,8 @@ impl fmt::Display for RenewFlightEndpointRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "RenewFlightEndpointRequest {{")?;
         write!(f, " endpoint: ")?;
-        match &self.endpoint {
+
+        match &self.endpoint.as_option() {
             Some(value) => write!(f, "{value}")?,
             None => write!(f, "None")?,
         }
@@ -489,7 +505,7 @@ impl FlightData {
 
     /// Add a [`FlightDescriptor`] describing the data
     pub fn with_descriptor(mut self, flight_descriptor: FlightDescriptor) -> Self {
-        self.flight_descriptor = Some(flight_descriptor);
+        self.flight_descriptor = flight_descriptor.into();
         self
     }
 
@@ -567,7 +583,7 @@ impl FlightInfo {
     pub fn new() -> FlightInfo {
         FlightInfo {
             schema: Bytes::new(),
-            flight_descriptor: None,
+            flight_descriptor: MessageField::none(),
             endpoint: vec![],
             ordered: false,
             // Flight says "Set these to -1 if unknown."
@@ -612,7 +628,7 @@ impl FlightInfo {
 
     /// Add a [`FlightDescriptor`] describing what this data is
     pub fn with_descriptor(mut self, flight_descriptor: FlightDescriptor) -> Self {
-        self.flight_descriptor = Some(flight_descriptor);
+        self.flight_descriptor = flight_descriptor.into();
         self
     }
 
@@ -661,24 +677,19 @@ impl PollInfo {
     ///   );
     /// ```
     pub fn new() -> Self {
-        Self {
-            info: None,
-            flight_descriptor: None,
-            progress: None,
-            expiration_time: None,
-        }
+        Self::default()
     }
 
     /// Add the current available results for the poll call as a [`FlightInfo`]
     pub fn with_info(mut self, info: FlightInfo) -> Self {
-        self.info = Some(info);
+        self.info = info.into();
         self
     }
 
     /// Add a [`FlightDescriptor`] that the client should use for the next poll call,
     /// if the query is not yet complete
     pub fn with_descriptor(mut self, flight_descriptor: FlightDescriptor) -> Self {
-        self.flight_descriptor = Some(flight_descriptor);
+        self.flight_descriptor = flight_descriptor.into();
         self
     }
 
@@ -696,7 +707,7 @@ impl PollInfo {
 
     /// Specify expiration time for this request
     pub fn with_expiration_time(mut self, expiration_time: Timestamp) -> Self {
-        self.expiration_time = Some(expiration_time);
+        self.expiration_time = expiration_time.into();
         self
     }
 }
@@ -714,7 +725,7 @@ impl CancelFlightInfoRequest {
     /// Create a new [`CancelFlightInfoRequest`], providing the [`FlightInfo`]
     /// of the query to cancel.
     pub fn new(info: FlightInfo) -> Self {
-        Self { info: Some(info) }
+        Self { info: info.into() }
     }
 }
 
@@ -722,7 +733,7 @@ impl CancelFlightInfoResult {
     /// Create a new [`CancelFlightInfoResult`] from the provided [`CancelStatus`].
     pub fn new(status: CancelStatus) -> Self {
         Self {
-            status: status as i32,
+            status: status.into(),
         }
     }
 }
@@ -732,7 +743,7 @@ impl RenewFlightEndpointRequest {
     /// for which is being requested an extension of its expiration.
     pub fn new(endpoint: FlightEndpoint) -> Self {
         Self {
-            endpoint: Some(endpoint),
+            endpoint: endpoint.into(),
         }
     }
 }
@@ -795,7 +806,7 @@ impl FlightEndpoint {
 
     /// Set the [`Ticket`] used to retrieve data from the endpoint
     pub fn with_ticket(mut self, ticket: Ticket) -> Self {
-        self.ticket = Some(ticket);
+        self.ticket = ticket.into();
         self
     }
 
@@ -817,7 +828,7 @@ impl FlightEndpoint {
 
     /// Specify expiration time for this stream
     pub fn with_expiration_time(mut self, expiration_time: Timestamp) -> Self {
-        self.expiration_time = Some(expiration_time);
+        self.expiration_time = expiration_time.into();
         self
     }
 
@@ -846,7 +857,7 @@ mod tests {
     fn it_creates_flight_descriptor_command() {
         let expected_cmd = b"my_command";
         let fd = FlightDescriptor::new_cmd(expected_cmd.to_vec());
-        assert_eq!(fd.r#type(), DescriptorType::Cmd);
+        assert_eq!(fd.r#type, DescriptorType::Cmd);
         assert_eq!(fd.cmd, expected_cmd.to_vec());
     }
 
