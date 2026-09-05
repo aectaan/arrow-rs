@@ -28,6 +28,8 @@ members = [
     "arrow-data",
     "arrow-flight",
     "arrow-flight/gen",
+    "arrow-flight_buffa",
+    "arrow-flight_buffa/gen",
     "arrow-integration-test",
     "arrow-integration-testing",
     "arrow-ipc",

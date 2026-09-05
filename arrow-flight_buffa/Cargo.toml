@@ -67,10 +67,6 @@ default = []
 flight-sql = ["dep:arrow-arith", "dep:arrow-ord", "dep:arrow-row", "dep:arrow-select", "dep:arrow-string", "dep:once_cell"]
 tls = ["connectrpc/tls"]
 
-# Enable CLI tools
-cli = ["arrow-array/chrono-tz", "arrow-cast/prettyprint", "connectrpc/gzip", "connectrpc/zstd", "dep:anyhow", "dep:clap", "dep:tracing-log", "dep:tracing-subscriber", "dep:tokio"]
-
-
 [dev-dependencies]
 arrow-cast = { workspace = true, features = ["prettyprint"] }
 # Enable the IPC compression codecs so tests can exercise compressed Flight encoding
@@ -85,29 +81,6 @@ tokio = { version = "1.0", default-features = false, features = ["macros", "rt",
 tokio-stream = { version = "0.1", features = ["net"] }
 tower = { version = "0.5.0", features = ["util"] }
 uuid = { version = "1.10.0", features = ["v4"] }
-
-[[example]]
-name = "flight_sql_server"
-required-features = ["flight-sql", "tls-ring"]
-
-[[bin]]
-name = "flight_sql_client"
-required-features = ["cli", "flight-sql", "tls-ring"]
-
-[[test]]
-name = "flight_sql_client"
-path = "tests/flight_sql_client.rs"
-required-features = ["flight-sql", "tls-ring"]
-
-[[test]]
-name = "flight_sql_client_cli"
-path = "tests/flight_sql_client_cli.rs"
-required-features = ["cli", "flight-sql", "tls-ring"]
-
-[[bench]]
-name = "flight"
-path = "benches/flight.rs"
-harness = false
 
 [lints]
 workspace = true

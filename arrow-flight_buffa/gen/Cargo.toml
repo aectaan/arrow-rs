@@ -16,7 +16,7 @@
 # under the License.
 
 [package]
-name = "gen"
+name = "buffa_gen"
 description = "Code generation for arrow-flight"
 version = "0.1.0"
 edition = { workspace = true }
