@@ -6,6 +6,8 @@ mod generated {
     include!("arrow.flight.protocol.sql.rs");
 }
 
+pub mod metadata;
+
 #[cfg(test)]
 mod tests {
 
