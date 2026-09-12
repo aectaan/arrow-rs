@@ -1,5 +1,3 @@
-use buffa_types::Any;
-
 // This code is generated so we don't want to fix any lint violations manually.
 #[allow(clippy::allow_attributes)]
 #[allow(clippy::all)]
@@ -8,12 +6,12 @@ mod generated {
     include!("arrow.flight.protocol.sql.rs");
 }
 
-pub use generated::{CommandStatementQuery, TicketStatementQuery};
-
 #[cfg(test)]
 mod tests {
 
-    use super::*;
+    use buffa_types::Any;
+
+    use crate::sql::generated::{CommandStatementQuery, TicketStatementQuery};
 
     #[test]
     fn test_type_url() {
